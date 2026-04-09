@@ -30,48 +30,49 @@ DEFAULT_CONFIG = {
 
 GUIDE = """\033[1;36m
   ╔════════════════════════════════════════════════╗
-  ║            TAPO CLI — Getting Started          ║
+  ║         TAPOKITTY CLI — Getting Started        ║
   ╚════════════════════════════════════════════════╝\033[0m
 
-  \033[1m1. Configure your cameras\033[0m
+  \033[1m1. Enable third-party access on your cameras\033[0m
 
-     Edit \033[33m~/.config/tapo-cli/config.json\033[0m with your camera details:
+     Open the \033[33mTapo app\033[0m on your phone, then for each camera:
+       1. Tap the camera to open its live view
+       2. Tap the \033[33mgear icon\033[0m (top right) to open settings
+       3. Go to \033[33mAdvanced Settings\033[0m
+       4. Tap \033[33mCamera Account\033[0m (or Device Account)
+       5. Create a username and password
+          (this is the RTSP / third-party account)
 
-     {
-       "cameras": {
-         "living": {"ip": "192.168.1.100", "name": "Living Room"},
-         "door":   {"ip": "192.168.1.101", "name": "Front Door"}
-       },
-       "rtsp_user": "your_rtsp_user",
-       "rtsp_password": "your_rtsp_password",
-       "api_user": "admin",
-       "api_password": "your_tapo_cloud_password"
-     }
+  \033[1m2. Run the setup wizard\033[0m
 
-     \033[2mYou can find camera IPs in your router's admin page or the Tapo app.\033[0m
+     \033[33mtapokitty setup\033[0m
 
-  \033[1m2. Requirements\033[0m
+     This will scan your network for Tapo cameras, let you
+     name them, and ask for your credentials. Everything is
+     saved to \033[33m~/.config/tapo-cli/config.json\033[0m.
+
+  \033[1m3. Requirements\033[0m
 
      • ffmpeg (for live view & snapshots): \033[33mbrew install ffmpeg\033[0m
-     • A Kitty-compatible terminal (for the \033[33mview\033[0m command)
+     • A \033[33mKitty-compatible terminal\033[0m (Kitty, WezTerm, etc.)
 
-  \033[1m3. Usage\033[0m
+  \033[1m4. Usage\033[0m
 
-     \033[33mtapo list\033[0m                     List configured cameras
-     \033[33mtapo status <cam>\033[0m             Show camera info
-     \033[33mtapo privacy <cam> on|off\033[0m     Cover/uncover lens
-     \033[33mtapo move <cam> <x> <y>\033[0m       Pan/tilt
-     \033[33mtapo view <cam>\033[0m               Live stream (Kitty terminal)
-     \033[33mtapo snap <cam>\033[0m               Terminal snapshot
-     \033[33mtapo led <cam> on|off\033[0m         Toggle indicator LED
-     \033[33mtapo alarm <cam> on|off\033[0m       Trigger/stop alarm
-     \033[33mtapo detection <cam> on|off\033[0m   Toggle motion detection
-     \033[33mtapo preset <cam> list|go\033[0m     Manage presets
-     \033[33mtapo reboot <cam>\033[0m             Reboot camera
-     \033[33mtapo config\033[0m                   Show config file path
-     \033[33mtapo guide\033[0m                    Show this guide
+     \033[33mtapokitty list\033[0m                     List configured cameras
+     \033[33mtapokitty status <cam>\033[0m             Show camera info
+     \033[33mtapokitty view <cam>\033[0m               HD live stream (Kitty)
+     \033[33mtapokitty snap <cam>\033[0m               Terminal snapshot
+     \033[33mtapokitty privacy <cam> on|off\033[0m     Cover/uncover lens
+     \033[33mtapokitty move <cam> <x> <y>\033[0m       Pan/tilt
+     \033[33mtapokitty led <cam> on|off\033[0m         Toggle indicator LED
+     \033[33mtapokitty alarm <cam> on|off\033[0m       Trigger/stop alarm
+     \033[33mtapokitty detection <cam> on|off\033[0m   Toggle motion detection
+     \033[33mtapokitty preset <cam> list|go\033[0m     Manage presets
+     \033[33mtapokitty reboot <cam>\033[0m             Reboot camera
+     \033[33mtapokitty setup\033[0m                    Run setup wizard again
+     \033[33mtapokitty guide\033[0m                    Show this guide
 
-  \033[1m4. Live View Controls\033[0m
+  \033[1m5. Live View Controls\033[0m
 
      \033[33mq\033[0m  Quit   \033[33m:\033[0m  Command mode   \033[33mTab\033[0m  Switch camera
      \033[33mw/a/s/d\033[0m  Pan/tilt   \033[33mp\033[0m  Privacy   \033[33ml\033[0m  LED
@@ -83,15 +84,167 @@ def show_guide():
     print(GUIDE)
 
 
+def _discover_cameras():
+    """Scan the local network for Tapo cameras using ARP + known ports."""
+    import socket
+
+    print("\n\033[1mScanning network for Tapo cameras...\033[0m\n")
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "192.168.1.1"
+
+    prefix = ".".join(local_ip.split(".")[:3])
+
+    found = []
+    print(f"  Scanning {prefix}.1-254 (RTSP port 554)...")
+
+    for i in range(1, 255):
+        ip = f"{prefix}.{i}"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.15)
+        try:
+            result = sock.connect_ex((ip, 554))
+            if result == 0:
+                found.append(ip)
+                print(f"  \033[32mFound device at {ip}\033[0m")
+        except Exception:
+            pass
+        finally:
+            sock.close()
+
+    if not found:
+        print("\n  \033[33mNo cameras found. Make sure they're on the same network.\033[0m")
+        print("  You can add cameras manually by IP during setup.\n")
+
+    return found
+
+
+def _prompt(prompt_text, default=None):
+    if default:
+        result = input(f"  {prompt_text} [{default}]: ").strip()
+        return result if result else default
+    while True:
+        result = input(f"  {prompt_text}: ").strip()
+        if result:
+            return result
+        print("  \033[33mThis field is required.\033[0m")
+
+
+def cmd_setup(args):
+    """Interactive setup wizard."""
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+
+    existing = {}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE) as f:
+            existing = json.load(f)
+
+    existing_cameras = existing.get("cameras", {})
+
+    print("\033[1;36m")
+    print("  ╔════════════════════════════════════════════════╗")
+    print("  ║          TAPOKITTY CLI — Setup Wizard          ║")
+    print("  ╚════════════════════════════════════════════════╝")
+    print("\033[0m")
+
+    print("  \033[1mBefore we start:\033[0m")
+    print("  Make sure you've created a \033[33mcamera account\033[0m in the Tapo app:")
+    print("    1. Open a camera in the Tapo app")
+    print("    2. Tap the \033[33mgear icon\033[0m (top right)")
+    print("    3. Go to \033[33mAdvanced Settings\033[0m")
+    print("    4. Tap \033[33mCamera Account\033[0m")
+    print("    5. Create a username and password")
+    print()
+    input("  Press \033[33mEnter\033[0m when ready...")
+    print()
+
+    discovered = _discover_cameras()
+    cameras = dict(existing_cameras)
+    print()
+
+    if discovered:
+        print(f"\033[1m  Found {len(discovered)} device(s). Let's name them.\033[0m")
+        print("  (Press Enter to skip a device)\n")
+        for ip in discovered:
+            existing_name = None
+            for name, cam in cameras.items():
+                if cam["ip"] == ip:
+                    existing_name = name
+                    break
+
+            if existing_name:
+                print(f"  \033[2m{ip} already configured as '{existing_name}'\033[0m")
+                continue
+
+            name = input(f"  Name for \033[33m{ip}\033[0m (e.g. living, door): ").strip().lower()
+            if name:
+                display = input(f"  Display name for '{name}' [Camera {ip}]: ").strip()
+                if not display:
+                    display = f"Camera {ip}"
+                cameras[name] = {"ip": ip, "name": display}
+                print(f"  \033[32mAdded '{name}'\033[0m\n")
+
+    while True:
+        print()
+        add = input("  Add a camera manually by IP? (y/n) [n]: ").strip().lower()
+        if add != "y":
+            break
+        ip = _prompt("Camera IP address")
+        name = _prompt("Short name (e.g. living, door)").lower()
+        display = _prompt(f"Display name", f"Camera {ip}")
+        cameras[name] = {"ip": ip, "name": display}
+        print(f"  \033[32mAdded '{name}' at {ip}\033[0m")
+
+    if not cameras:
+        print("\n  \033[33mNo cameras configured. Run 'tapokitty setup' again later.\033[0m")
+        return
+
+    print("\n\033[1m  Now enter your camera account credentials.\033[0m")
+    print("  (The account you created in the Tapo app → Advanced Settings → Camera Account)\n")
+
+    rtsp_user = _prompt("Camera account username", existing.get("rtsp_user"))
+    rtsp_password = _prompt("Camera account password", existing.get("rtsp_password") if existing.get("rtsp_password") != "changeme" else None)
+
+    print("\n\033[1m  Tapo cloud credentials\033[0m")
+    print("  (Your Tapo app login — used for the camera API)\n")
+
+    api_user = _prompt("Tapo email/username", existing.get("api_user", "admin"))
+    api_password = _prompt("Tapo password", existing.get("api_password") if existing.get("api_password") != "changeme" else None)
+
+    config = {
+        "cameras": cameras,
+        "rtsp_user": rtsp_user,
+        "rtsp_password": rtsp_password,
+        "api_user": api_user,
+        "api_password": api_password,
+    }
+
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+    print(f"\n  \033[1;32mConfig saved to {CONFIG_FILE}\033[0m\n")
+    print("  \033[1mYour cameras:\033[0m")
+    for key, cam in cameras.items():
+        print(f"    {key:10s}  {cam['ip']:18s}  {cam['name']}")
+    print(f"\n  Try: \033[33mtapokitty status {list(cameras.keys())[0]}\033[0m\n")
+
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
         show_guide()
-        print(f"  \033[1;32mConfig file created at:\033[0m \033[33m{CONFIG_FILE}\033[0m")
-        print(f"  Edit it with your camera details, then run \033[33mtapo list\033[0m to verify.\n")
-        sys.exit(0)
+        print("\n  \033[1;33mNo config found. Running setup wizard...\033[0m\n")
+
+        class FakeArgs:
+            pass
+        cmd_setup(FakeArgs())
+        if not os.path.exists(CONFIG_FILE):
+            sys.exit(1)
     with open(CONFIG_FILE) as f:
         return json.load(f)
 
@@ -613,27 +766,20 @@ def cmd_guide(args):
     show_guide()
 
 
-def cmd_config(args):
-    """Show config file location or open it."""
-    print(f"Config file: {CONFIG_FILE}")
-    if not os.path.exists(CONFIG_FILE):
-        print("Run any command to generate a default config.")
-
-
 def main():
     parser = argparse.ArgumentParser(
-        prog="tapo",
-        description="Control Tapo cameras from the terminal",
+        prog="tapokitty",
+        description="Control Tapo cameras from the terminal (Kitty graphics)",
     )
     sub = parser.add_subparsers(dest="command")
+
+    # setup
+    p = sub.add_parser("setup", help="Interactive setup wizard")
+    p.set_defaults(func=cmd_setup)
 
     # guide
     p = sub.add_parser("guide", help="Show setup guide")
     p.set_defaults(func=cmd_guide)
-
-    # config
-    p = sub.add_parser("config", help="Show config file location")
-    p.set_defaults(func=cmd_config)
 
     # list
     p = sub.add_parser("list", help="List available cameras")

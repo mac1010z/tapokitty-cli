@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tapokitty-cli"
+version = "1.0.0"
+description = "Control Tapo cameras from the terminal (Kitty graphics)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+    "pytapo>=3.0.0",
+]
+
+[project.optional-dependencies]
+snap = ["Pillow>=9.0.0"]
+
+[project.scripts]
+tapokitty = "tapokitty_cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

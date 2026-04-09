@@ -33,17 +33,24 @@ GUIDE = """\033[1;36m
   ║         TAPOKITTY CLI — Getting Started        ║
   ╚════════════════════════════════════════════════╝\033[0m
 
-  \033[1m1. Enable third-party access on your cameras\033[0m
+  \033[1m1. Enable third-party compatibility\033[0m
 
-     Open the \033[33mTapo app\033[0m on your phone, then for each camera:
+     Open the \033[33mTapo app\033[0m on your phone:
+       1. Tap the \033[33mprofile icon\033[0m (top left)
+       2. Find \033[33mThird-Party Services\033[0m
+       3. Tap \033[33mThird-Party Compatibility\033[0m (at the bottom)
+       4. Turn it \033[33mON\033[0m
+
+  \033[1m2. Create a camera account\033[0m
+
+     For each camera:
        1. Tap the camera to open its live view
        2. Tap the \033[33mgear icon\033[0m (top right) to open settings
        3. Go to \033[33mAdvanced Settings\033[0m
        4. Tap \033[33mCamera Account\033[0m (or Device Account)
        5. Create a username and password
-          (this is the RTSP / third-party account)
 
-  \033[1m2. Run the setup wizard\033[0m
+  \033[1m3. Run the setup wizard\033[0m
 
      \033[33mtapokitty setup\033[0m
 
@@ -51,12 +58,12 @@ GUIDE = """\033[1;36m
      name them, and ask for your credentials. Everything is
      saved to \033[33m~/.config/tapo-cli/config.json\033[0m.
 
-  \033[1m3. Requirements\033[0m
+  \033[1m4. Requirements\033[0m
 
      • ffmpeg (for live view & snapshots): \033[33mbrew install ffmpeg\033[0m
      • A \033[33mKitty-compatible terminal\033[0m (Kitty, WezTerm, etc.)
 
-  \033[1m4. Usage\033[0m
+  \033[1m5. Usage\033[0m
 
      \033[33mtapokitty list\033[0m                     List configured cameras
      \033[33mtapokitty status <cam>\033[0m             Show camera info
@@ -72,7 +79,7 @@ GUIDE = """\033[1;36m
      \033[33mtapokitty setup\033[0m                    Run setup wizard again
      \033[33mtapokitty guide\033[0m                    Show this guide
 
-  \033[1m5. Live View Controls\033[0m
+  \033[1m6. Live View Controls\033[0m
 
      \033[33mq\033[0m  Quit   \033[33m:\033[0m  Command mode   \033[33mTab\033[0m  Switch camera
      \033[33mw/a/s/d\033[0m  Pan/tilt   \033[33mp\033[0m  Privacy   \033[33ml\033[0m  LED
